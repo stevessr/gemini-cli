@@ -202,4 +202,30 @@ impl NodeBridge {
             Err(anyhow!("Failed to execute tool: {:?}", response.error))
         }
     }
+
+    pub async fn execute_command(&self, command: &str, workspace_path: &str) -> Result<String> {
+        let request = NodeRequest {
+            id: Uuid::new_v4().to_string(),
+            method: "execute_command".to_string(),
+            params: serde_json::json!({
+                "command": command,
+                "workspace_path": workspace_path
+            }),
+        };
+
+        let response = self.send_request(request).await?;
+        
+        if response.success {
+            let output = response.data
+                .as_ref()
+                .and_then(|d| d.get("output"))
+                .and_then(|o| o.as_str())
+                .unwrap_or("Command executed")
+                .to_string();
+            
+            Ok(output)
+        } else {
+            Err(anyhow!("Failed to execute command: {:?}", response.error))
+        }
+    }
 }

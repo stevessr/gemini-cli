@@ -71,23 +71,6 @@
             margin-right: auto;
             border: 1px solid #4b5563;
         }
-        .workspace-item {
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            background-color: #374151;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: 1px solid #4b5563;
-        }
-        .workspace-item:hover {
-            background-color: #4b5563;
-            transform: translateY(-1px);
-        }
-        .workspace-item.active {
-            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
-            border-color: #3b82f6;
-        }
         .auth-section {
             background-color: #374151;
             border-radius: 8px;
@@ -138,13 +121,35 @@
         .n-select {
             background-color: #374151 !important;
         }
+        .command-output {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .workspace-item {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background-color: #374151;
+            border-radius: 6px;
+            transition: all 0.2s;
+            border: 1px solid #4b5563;
+        }
+        .workspace-item:hover {
+            background-color: #4b5563;
+            transform: translateY(-1px);
+        }
+        .workspace-item.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+            border-color: #3b82f6;
+        }
     </style>
 </head>
 <body>
     <div id="app">
         <n-config-provider :theme="darkTheme">
             <n-notification-provider>
-                <div class="app-container">
+                <n-dialog-provider>
+                    <n-message-provider>
+                        <div class="app-container">
                     <!-- Header -->
                     <div class="header">
                         <n-space justify="space-between" align="center">
@@ -200,13 +205,61 @@
                                         :key="workspace.id"
                                         class="workspace-item"
                                         :class="{ active: currentSession?.id === workspace.id }"
-                                        @click="selectWorkspace(workspace)"
                                     >
                                         <n-space vertical size="small">
-                                            <n-text strong>{{ workspace.name }}</n-text>
+                                            <n-space justify="space-between" align="center">
+                                                <n-text strong>{{ workspace.name }}</n-text>
+                                                <n-space size="small">
+                                                    <n-button size="tiny" @click="selectWorkspace(workspace)" :disabled="currentSession?.id === workspace.id">
+                                                        Select
+                                                    </n-button>
+                                                    <n-button size="tiny" secondary @click="editWorkspace(workspace)">
+                                                        Edit
+                                                    </n-button>
+                                                    <n-button size="tiny" type="error" @click="deleteWorkspaceConfirm(workspace)">
+                                                        Delete
+                                                    </n-button>
+                                                </n-space>
+                                            </n-space>
                                             <n-text depth="3" style="font-size: 0.8rem;">{{ workspace.path }}</n-text>
                                         </n-space>
                                     </div>
+                                </div>
+
+                                <!-- Command Execution -->
+                                <div class="settings-panel">
+                                    <n-text style="font-weight: bold; margin-bottom: 1rem; display: block;">Execute Command</n-text>
+                                    <n-space vertical>
+                                        <n-input
+                                            v-model:value="commandInput"
+                                            placeholder="Enter command to execute..."
+                                            :disabled="executingCommand"
+                                            @keydown.enter="executeCommand"
+                                        />
+                                        <n-select
+                                            v-model:value="commandWorkspace"
+                                            :options="workspaceOptions"
+                                            placeholder="Select workspace (optional)"
+                                            clearable
+                                        />
+                                        <n-button
+                                            @click="executeCommand"
+                                            :loading="executingCommand"
+                                            block
+                                            type="primary"
+                                            :disabled="!commandInput.trim()"
+                                        >
+                                            Execute Command
+                                        </n-button>
+                                        <div v-if="commandOutput" class="command-output">
+                                            <n-text style="font-weight: bold; display: block; margin-bottom: 0.5rem;">Output:</n-text>
+                                            <pre style="white-space: pre-wrap; font-size: 0.85rem; background: #1f2937; padding: 0.75rem; border-radius: 4px; border: 1px solid #374151;">{{ commandOutput }}</pre>
+                                        </div>
+                                        <div v-if="commandError" class="error">
+                                            <n-text style="font-weight: bold;">Error:</n-text><br>
+                                            {{ commandError }}
+                                        </div>
+                                    </n-space>
                                 </div>
 
                                 <!-- Pending Approvals -->
@@ -356,7 +409,40 @@
                             </n-space>
                         </div>
                     </n-modal>
-                </div>
+
+                    <!-- Edit Workspace Modal -->
+                    <n-modal
+                        v-model:show="showEditWorkspace"
+                        preset="dialog"
+                        title="Edit Workspace"
+                        style="width: 500px;"
+                    >
+                        <n-space vertical size="large">
+                            <n-form-item label="Workspace Name">
+                                <n-input
+                                    v-model:value="editingWorkspace.name"
+                                    placeholder="Enter workspace name"
+                                />
+                            </n-form-item>
+                            <n-form-item label="Workspace Path">
+                                <n-input
+                                    v-model:value="editingWorkspace.path"
+                                    placeholder="Enter workspace path"
+                                />
+                            </n-form-item>
+                            <n-space>
+                                <n-button @click="saveWorkspace" :loading="savingWorkspace" type="primary">
+                                    Save Changes
+                                </n-button>
+                                <n-button @click="showEditWorkspace = false" secondary>
+                                    Cancel
+                                </n-button>
+                            </n-space>
+                        </n-space>
+                    </n-modal>
+                        </div>
+                    </n-message-provider>
+                </n-dialog-provider>
             </n-notification-provider>
         </n-config-provider>
     </div>
@@ -368,9 +454,12 @@
         createApp({
             setup() {
                 const showSettings = Vue.ref(false);
+                const showEditWorkspace = Vue.ref(false);
                 const loading = Vue.ref(false);
                 const thinking = Vue.ref(false);
                 const validatingAuth = Vue.ref(false);
+                const savingWorkspace = Vue.ref(false);
+                const executingCommand = Vue.ref(false);
                 
                 const workspaces = Vue.ref([]);
                 const currentSession = Vue.ref(null);
@@ -378,6 +467,17 @@
                 const pendingApprovals = Vue.ref([]);
                 const newWorkspacePath = Vue.ref('');
                 const newMessage = Vue.ref('');
+                
+                const commandInput = Vue.ref('');
+                const commandWorkspace = Vue.ref(null);
+                const commandOutput = Vue.ref('');
+                const commandError = Vue.ref('');
+                
+                const editingWorkspace = Vue.ref({
+                    id: null,
+                    name: '',
+                    path: ''
+                });
                 
                 const authType = Vue.ref('GeminiApiKey');
                 const authConfig = Vue.ref({ api_key: '', project_id: '', location: 'us-central1' });
@@ -390,6 +490,13 @@
                     { label: 'Vertex AI', value: 'VertexAi' },
                     { label: 'Existing Login', value: 'ExistingLogin' }
                 ];
+
+                const workspaceOptions = Vue.computed(() => [
+                    ...workspaces.value.map(w => ({
+                        label: `${w.name} (${w.path})`,
+                        value: w.path
+                    }))
+                ]);
 
                 // Load workspaces on startup
                 Vue.onMounted(() => {
@@ -556,26 +663,150 @@
                     }
                 };
 
+                const editWorkspace = (workspace) => {
+                    editingWorkspace.value = {
+                        id: workspace.id,
+                        name: workspace.name,
+                        path: workspace.path
+                    };
+                    showEditWorkspace.value = true;
+                };
+
+                const saveWorkspace = async () => {
+                    if (!editingWorkspace.value.id) return;
+                    
+                    savingWorkspace.value = true;
+                    try {
+                        const response = await fetch(`/api/sessions/${editingWorkspace.value.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                name: editingWorkspace.value.name,
+                                path: editingWorkspace.value.path
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            await loadWorkspaces();
+                            showEditWorkspace.value = false;
+                            window.$message?.success('Workspace updated successfully');
+                        } else {
+                            const error = await response.text();
+                            window.$message?.error(`Failed to update workspace: ${error}`);
+                        }
+                    } catch (error) {
+                        window.$message?.error('Failed to update workspace');
+                    } finally {
+                        savingWorkspace.value = false;
+                    }
+                };
+
+                const deleteWorkspaceConfirm = (workspace) => {
+                    window.$dialog?.warning({
+                        title: 'Delete Workspace',
+                        content: `Are you sure you want to delete the workspace "${workspace.name}"? This will remove all chat history.`,
+                        positiveText: 'Delete',
+                        negativeText: 'Cancel',
+                        onPositiveClick: () => deleteWorkspace(workspace.id)
+                    });
+                };
+
+                const deleteWorkspace = async (workspaceId) => {
+                    try {
+                        const response = await fetch(`/api/sessions/${workspaceId}`, {
+                            method: 'DELETE'
+                        });
+                        
+                        if (response.ok) {
+                            await loadWorkspaces();
+                            if (currentSession.value?.id === workspaceId) {
+                                currentSession.value = null;
+                                messages.value = [];
+                                pendingApprovals.value = [];
+                            }
+                            window.$message?.success('Workspace deleted successfully');
+                        } else {
+                            const error = await response.text();
+                            window.$message?.error(`Failed to delete workspace: ${error}`);
+                        }
+                    } catch (error) {
+                        window.$message?.error('Failed to delete workspace');
+                    }
+                };
+
+                const executeCommand = async () => {
+                    if (!commandInput.value.trim()) return;
+                    
+                    executingCommand.value = true;
+                    commandOutput.value = '';
+                    commandError.value = '';
+                    
+                    try {
+                        const response = await fetch('/api/execute', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                command: commandInput.value,
+                                workspace_path: commandWorkspace.value
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            commandOutput.value = result.output;
+                            commandError.value = result.error;
+                            
+                            if (result.error) {
+                                window.$message?.error('Command executed with errors');
+                            } else {
+                                window.$message?.success('Command executed successfully');
+                            }
+                        } else {
+                            const error = await response.text();
+                            commandError.value = error;
+                            window.$message?.error(`Failed to execute command: ${error}`);
+                        }
+                    } catch (error) {
+                        commandError.value = error.message;
+                        window.$message?.error('Failed to execute command');
+                    } finally {
+                        executingCommand.value = false;
+                    }
+                };
+
                 return {
                     darkTheme,
                     showSettings,
+                    showEditWorkspace,
                     loading,
                     thinking,
                     validatingAuth,
+                    savingWorkspace,
+                    executingCommand,
                     workspaces,
                     currentSession,
                     messages,
                     pendingApprovals,
                     newWorkspacePath,
                     newMessage,
+                    commandInput,
+                    commandWorkspace,
+                    commandOutput,
+                    commandError,
+                    editingWorkspace,
                     authType,
                     authConfig,
                     authValid,
                     authError,
                     isAuthenticated,
                     authOptions,
+                    workspaceOptions,
                     createWorkspace,
                     selectWorkspace,
+                    editWorkspace,
+                    saveWorkspace,
+                    deleteWorkspaceConfirm,
+                    executeCommand,
                     sendMessage,
                     handleApproval,
                     onAuthTypeChange,

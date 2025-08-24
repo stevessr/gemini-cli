@@ -55,6 +55,9 @@ class GeminiBridge {
         case 'execute_tool':
           await this.executeTool(id, params);
           break;
+        case 'execute_command':
+          await this.executeCommand(id, params);
+          break;
         case 'get_auth_info':
           await this.getAuthInfo(id, params);
           break;
@@ -185,6 +188,45 @@ class GeminiBridge {
       this.sendSuccess(requestId, { result });
     } catch (error) {
       this.sendError(requestId, `Failed to execute tool: ${error.message}`);
+    }
+  }
+
+  async executeCommand(requestId, params) {
+    try {
+      const { command, workspace_path } = params;
+      
+      // Change to workspace directory
+      const originalCwd = process.cwd();
+      if (workspace_path && fs.existsSync(workspace_path)) {
+        process.chdir(workspace_path);
+      }
+      
+      try {
+        // Execute command using child_process
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execAsync = promisify(exec);
+        
+        const result = await execAsync(command, {
+          cwd: workspace_path || process.cwd(),
+          timeout: 30000, // 30 second timeout
+          maxBuffer: 1024 * 1024 // 1MB buffer
+        });
+        
+        this.sendSuccess(requestId, {
+          output: result.stdout || result.stderr || 'Command executed successfully'
+        });
+      } catch (error) {
+        this.sendSuccess(requestId, {
+          output: error.stdout || '',
+          error: error.stderr || error.message
+        });
+      } finally {
+        // Restore original working directory
+        process.chdir(originalCwd);
+      }
+    } catch (error) {
+      this.sendError(requestId, `Failed to execute command: ${error.message}`);
     }
   }
 

@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::Json,
-    routing::{get, post},
+    routing::{get, post, put, delete},
     Router,
 };
 use clap::Parser;
@@ -107,19 +107,35 @@ struct ApprovalRequest {
 }
 
 #[derive(Serialize, Deserialize)]
-struct WorkspaceInfo {
-    id: Uuid,
-    path: String,
-    name: String,
+struct UpdateWorkspaceRequest {
+    name: Option<String>,
+    path: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CommandExecutionRequest {
+    command: String,
+    workspace_path: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CommandExecutionResponse {
+    output: String,
+    error: Option<String>,
 }
 
 async fn create_session(
     State(state): State<AppState>,
     Json(req): Json<CreateSessionRequest>,
 ) -> Result<Json<CreateSessionResponse>, StatusCode> {
-    // Validate workspace path
-    if !std::path::Path::new(&req.workspace_path).exists() {
-        return Err(StatusCode::BAD_REQUEST);
+    // Create workspace directory if it doesn't exist
+    let workspace_path = std::path::Path::new(&req.workspace_path);
+    if !workspace_path.exists() {
+        if let Err(e) = std::fs::create_dir_all(&workspace_path) {
+            error!("Failed to create workspace directory: {}", e);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        info!("Created workspace directory: {}", req.workspace_path);
     }
 
     // Validate authentication if provided
@@ -318,6 +334,97 @@ async fn get_session_history(
     })))
 }
 
+#[derive(Serialize, Deserialize)]
+struct WorkspaceInfo {
+    id: Uuid,
+    path: String,
+    name: String,
+}
+
+async fn update_workspace(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<Uuid>,
+    Json(req): Json<UpdateWorkspaceRequest>,
+) -> Result<Json<WorkspaceInfo>, StatusCode> {
+    // Get the current session
+    let session = match state.database.get_session(workspace_id).await {
+        Ok(Some(session)) => session,
+        Ok(None) => return Err(StatusCode::NOT_FOUND),
+        Err(e) => {
+            error!("Failed to get session: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
+
+    let mut new_path = session.workspace_path.clone();
+    
+    // Update path if provided
+    if let Some(path) = req.path {
+        // Create new directory if it doesn't exist
+        if !std::path::Path::new(&path).exists() {
+            if let Err(e) = std::fs::create_dir_all(&path) {
+                error!("Failed to create new workspace directory: {}", e);
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+        new_path = path;
+    }
+
+    // Update the session in database
+    if let Err(e) = state.database.update_session_path(workspace_id, &new_path).await {
+        error!("Failed to update session path: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let path_name = std::path::Path::new(&new_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Unknown")
+        .to_string();
+
+    Ok(Json(WorkspaceInfo {
+        id: workspace_id,
+        path: new_path,
+        name: req.name.unwrap_or(path_name),
+    }))
+}
+
+async fn delete_workspace(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if let Err(e) = state.database.delete_session(workspace_id).await {
+        error!("Failed to delete session: {}", e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+async fn execute_command(
+    State(state): State<AppState>,
+    Json(req): Json<CommandExecutionRequest>,
+) -> Result<Json<CommandExecutionResponse>, StatusCode> {
+    let workspace_path = req.workspace_path.unwrap_or_else(|| ".".to_string());
+    
+    // Execute command using gemini-cli through node bridge
+    match state.node_bridge.execute_command(&req.command, &workspace_path).await {
+        Ok(result) => {
+            Ok(Json(CommandExecutionResponse {
+                output: result,
+                error: None,
+            }))
+        }
+        Err(e) => {
+            error!("Failed to execute command: {}", e);
+            Ok(Json(CommandExecutionResponse {
+                output: String::new(),
+                error: Some(e.to_string()),
+            }))
+        }
+    }
+}
+
 async fn list_workspaces(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<WorkspaceInfo>>, StatusCode> {
@@ -378,6 +485,15 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize database
     let database_url = format!("sqlite://{}", args.database.display());
+    
+    // Ensure database file exists - create it if necessary
+    if !args.database.exists() {
+        if let Some(parent) = args.database.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::File::create(&args.database)?;
+    }
+    
     let database = Database::new(&database_url).await?;
     info!("Database initialized");
 
@@ -399,7 +515,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/sessions/:id/messages", post(send_message))
         .route("/api/sessions/:session_id/approve/:approval_id", post(approve_tool))
         .route("/api/sessions/:id/history", get(get_session_history))
+        .route("/api/sessions/:id", put(update_workspace))
+        .route("/api/sessions/:id", delete(delete_workspace))
         .route("/api/workspaces", get(list_workspaces))
+        .route("/api/execute", post(execute_command))
         .nest_service("/static", ServeDir::new("static"))
         .layer(CorsLayer::permissive())
         .with_state(app_state);

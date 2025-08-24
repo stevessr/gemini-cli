@@ -45,6 +45,25 @@ pub struct PendingApproval {
 
 impl Database {
     pub async fn new(database_url: &str) -> Result<Self> {
+        // Ensure database directory exists
+        if let Some(db_path) = database_url.strip_prefix("sqlite://") {
+            let db_path = std::path::Path::new(db_path);
+            if let Some(parent) = db_path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)?;
+                }
+            }
+        } else if database_url.starts_with("sqlite:") {
+            // Handle sqlite:file_path format
+            let db_path = database_url.strip_prefix("sqlite:").unwrap_or(database_url);
+            let db_path = std::path::Path::new(db_path);
+            if let Some(parent) = db_path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)?;
+                }
+            }
+        }
+        
         let pool = SqlitePool::connect(database_url).await?;
         
         // Run migrations
@@ -239,5 +258,26 @@ impl Database {
         }).collect();
 
         Ok(sessions)
+    }
+
+    pub async fn update_session_path(&self, session_id: Uuid, new_path: &str) -> Result<()> {
+        let now = Utc::now();
+        sqlx::query("UPDATE sessions SET workspace_path = $1, updated_at = $2 WHERE id = $3")
+            .bind(new_path)
+            .bind(now)
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_session(&self, session_id: Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM sessions WHERE id = $1")
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(())
     }
 }
