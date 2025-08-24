@@ -43,3 +43,8 @@ packages/vscode-ide-companion/*.vsix
 
 # GHA credentials
 gha-creds-*.json
+
+# Web service build artifacts
+web-service/target/
+web-service/bridge/node_modules/
+web-service/Cargo.lock

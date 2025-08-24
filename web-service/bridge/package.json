@@ -1,0 +1,12 @@
+{
+  "name": "gemini-web-bridge",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "@google/gemini-cli-core": "file:../packages/core"
+  }
+}
