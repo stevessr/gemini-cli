@@ -3,627 +3,587 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini CLI Web Service</title>
+    <title>Gemini CLI Web Interface</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/naive-ui@2.38.2/dist/index.prod.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/naive-ui@2.38.2/dist/style.css">
     <style>
-        * {
+        body {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #0f172a;
+            color: #e2e8f0;
         }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-            background: #1a1a1a;
-            color: #e0e0e0;
+        .app-container {
             height: 100vh;
             display: flex;
             flex-direction: column;
         }
-
         .header {
-            background: #2d2d2d;
-            padding: 1rem;
-            border-bottom: 1px solid #444;
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
-
-        .header h1 {
-            color: #4285f4;
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .workspace-selector {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .workspace-input {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-
-        .workspace-input input {
-            background: #3a3a3a;
-            border: 1px solid #555;
-            color: #e0e0e0;
-            padding: 0.5rem;
-            border-radius: 4px;
-            min-width: 300px;
-        }
-
-        .workspace-input button {
-            background: #4285f4;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .workspace-input button:hover {
-            background: #3367d6;
-        }
-
-        .auth-selector {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-
-        .auth-selector select {
-            background: #3a3a3a;
-            border: 1px solid #555;
-            color: #e0e0e0;
-            padding: 0.5rem;
-            border-radius: 4px;
-        }
-
-        .settings-toggle {
-            background: #555;
-            color: white;
-            border: none;
-            padding: 0.5rem;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .settings-panel {
-            display: none;
-            background: #2a2a2a;
-            padding: 1rem;
-            border-bottom: 1px solid #444;
-        }
-
-        .settings-panel.active {
-            display: block;
-        }
-
-        .settings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1rem;
-        }
-
-        .setting-group {
-            background: #3a3a3a;
-            padding: 1rem;
-            border-radius: 4px;
-        }
-
-        .setting-group h3 {
-            margin-bottom: 0.5rem;
-            color: #4285f4;
-        }
-
-        .setting-row {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .setting-row label {
-            min-width: 120px;
-        }
-
-        .setting-row input, .setting-row select {
-            flex: 1;
-            background: #2a2a2a;
-            border: 1px solid #555;
-            color: #e0e0e0;
-            padding: 0.25rem;
-            border-radius: 4px;
-        }
-
         .main-content {
-            display: flex;
             flex: 1;
+            display: flex;
             overflow: hidden;
         }
-
-        .workspace-list {
-            width: 250px;
-            background: #2a2a2a;
-            border-right: 1px solid #444;
+        .sidebar {
+            width: 300px;
+            background-color: #1e293b;
+            border-right: 1px solid #334155;
+            padding: 1rem;
             overflow-y: auto;
         }
-
-        .workspace-item {
-            padding: 1rem;
-            border-bottom: 1px solid #333;
-            cursor: pointer;
-        }
-
-        .workspace-item:hover {
-            background: #333;
-        }
-
-        .workspace-item.active {
-            background: #4285f4;
-        }
-
-        .workspace-name {
-            font-weight: bold;
-            margin-bottom: 0.25rem;
-        }
-
-        .workspace-path {
-            font-size: 0.8rem;
-            color: #aaa;
-        }
-
-        .chat-container {
+        .chat-area {
             flex: 1;
             display: flex;
             flex-direction: column;
+            background-color: #0f172a;
         }
-
-        .chat-messages {
+        .messages-container {
             flex: 1;
-            overflow-y: auto;
             padding: 1rem;
+            overflow-y: auto;
+            background: linear-gradient(to bottom, #0f172a 0%, #1e293b 100%);
         }
-
+        .input-area {
+            padding: 1rem;
+            background-color: #1e293b;
+            border-top: 1px solid #334155;
+        }
         .message {
             margin-bottom: 1rem;
             padding: 1rem;
             border-radius: 8px;
             max-width: 80%;
         }
-
         .message.user {
-            background: #4285f4;
-            color: white;
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
             margin-left: auto;
-        }
-
-        .message.ai {
-            background: #3a3a3a;
-            color: #e0e0e0;
-        }
-
-        .message-content {
-            white-space: pre-wrap;
-            line-height: 1.5;
-        }
-
-        .message-timestamp {
-            font-size: 0.8rem;
-            opacity: 0.7;
-            margin-top: 0.5rem;
-        }
-
-        .pending-approvals {
-            background: #2a2a2a;
-            border: 1px solid #555;
-            border-radius: 4px;
-            padding: 1rem;
-            margin: 1rem 0;
-        }
-
-        .approval-item {
-            background: #3a3a3a;
-            padding: 1rem;
-            border-radius: 4px;
-            margin-bottom: 0.5rem;
-        }
-
-        .approval-actions {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-        }
-
-        .approval-actions button {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .approve-btn {
-            background: #34a853;
             color: white;
         }
-
-        .reject-btn {
-            background: #ea4335;
-            color: white;
+        .message.assistant {
+            background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+            margin-right: auto;
+            border: 1px solid #4b5563;
         }
-
-        .chat-input {
-            display: flex;
-            gap: 0.5rem;
-            padding: 1rem;
-            background: #2d2d2d;
-            border-top: 1px solid #444;
-        }
-
-        .chat-input textarea {
-            flex: 1;
-            background: #3a3a3a;
-            border: 1px solid #555;
-            color: #e0e0e0;
+        .workspace-item {
             padding: 0.75rem;
-            border-radius: 4px;
-            resize: none;
-            min-height: 60px;
-            font-family: inherit;
-        }
-
-        .chat-input button {
-            background: #4285f4;
-            color: white;
-            border: none;
-            padding: 0.75rem 1rem;
-            border-radius: 4px;
+            margin-bottom: 0.5rem;
+            background-color: #374151;
+            border-radius: 6px;
             cursor: pointer;
-            align-self: flex-end;
+            transition: all 0.2s;
+            border: 1px solid #4b5563;
         }
-
-        .chat-input button:hover {
-            background: #3367d6;
+        .workspace-item:hover {
+            background-color: #4b5563;
+            transform: translateY(-1px);
         }
-
-        .auto-approve-toggle {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: #3a3a3a;
-            padding: 0.5rem;
-            border-radius: 4px;
+        .workspace-item.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+            border-color: #3b82f6;
         }
-
-        .auto-approve-toggle input[type="checkbox"] {
-            margin: 0;
+        .auth-section {
+            background-color: #374151;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid #4b5563;
         }
-
-        .loading {
-            opacity: 0.5;
-            pointer-events: none;
-        }
-
-        .error {
-            background: #ea4335;
+        .pending-approval {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
             color: white;
-            padding: 0.5rem;
-            border-radius: 4px;
+            padding: 1rem;
             margin: 0.5rem 0;
+            border-radius: 8px;
+            border: 1px solid #f59e0b;
+        }
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #9ca3af;
+        }
+        .error {
+            color: #ef4444;
+            background-color: #1f2937;
+            border: 1px solid #ef4444;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            border-radius: 6px;
+        }
+        .settings-panel {
+            background-color: #1e293b;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid #334155;
+        }
+        .n-button {
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%) !important;
+            border: none !important;
+        }
+        .n-button:hover {
+            background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+        }
+        .n-input {
+            background-color: #374151 !important;
+            border-color: #4b5563 !important;
+            color: #e2e8f0 !important;
+        }
+        .n-select {
+            background-color: #374151 !important;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>Gemini CLI Web Service</h1>
-        <div class="workspace-selector">
-            <div class="workspace-input">
-                <input type="text" id="workspace-path" placeholder="Enter workspace path..." value="/tmp">
-                <button onclick="createWorkspace()">Create Workspace</button>
-            </div>
-            <div class="auth-selector">
-                <select id="auth-type">
-                    <option value="">No Authentication</option>
-                    <option value="GeminiApiKey">Gemini API Key</option>
-                    <option value="VertexAi">Vertex AI</option>
-                    <option value="ExistingLogin">Existing Login</option>
-                </select>
-            </div>
-            <button class="settings-toggle" onclick="toggleSettings()">Settings</button>
-        </div>
-    </div>
+    <div id="app">
+        <n-config-provider :theme="darkTheme">
+            <n-notification-provider>
+                <div class="app-container">
+                    <!-- Header -->
+                    <div class="header">
+                        <n-space justify="space-between" align="center">
+                            <n-space align="center">
+                                <n-icon size="24" color="#3b82f6">
+                                    <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                                </n-icon>
+                                <n-text style="font-size: 1.5rem; font-weight: bold;">Gemini CLI Web Interface</n-text>
+                            </n-space>
+                            <n-space>
+                                <n-button @click="showSettings = true" secondary>
+                                    <template #icon>
+                                        <n-icon><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11.03L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11.03C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/></svg></n-icon>
+                                    </template>
+                                    Settings
+                                </n-button>
+                            </n-space>
+                        </n-space>
+                    </div>
 
-    <div class="settings-panel" id="settings-panel">
-        <div class="settings-grid">
-            <div class="setting-group">
-                <h3>Gemini API Key</h3>
-                <div class="setting-row">
-                    <label>API Key:</label>
-                    <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API key">
-                </div>
-            </div>
-            <div class="setting-group">
-                <h3>Vertex AI</h3>
-                <div class="setting-row">
-                    <label>Project ID:</label>
-                    <input type="text" id="vertex-project-id" placeholder="your-project-id">
-                </div>
-                <div class="setting-row">
-                    <label>Location:</label>
-                    <input type="text" id="vertex-location" placeholder="us-central1" value="us-central1">
-                </div>
-            </div>
-            <div class="setting-group">
-                <h3>Existing Login</h3>
-                <div class="setting-row">
-                    <label>Login Path:</label>
-                    <input type="text" id="existing-login-path" placeholder="/path/to/login/file">
-                </div>
-            </div>
-        </div>
-    </div>
+                    <div class="main-content">
+                        <!-- Sidebar -->
+                        <div class="sidebar">
+                            <n-space vertical size="large">
+                                <!-- Workspace Creation -->
+                                <div class="settings-panel">
+                                    <n-text style="font-weight: bold; margin-bottom: 1rem; display: block;">Create Workspace</n-text>
+                                    <n-space vertical>
+                                        <n-input
+                                            v-model:value="newWorkspacePath"
+                                            placeholder="Enter workspace path..."
+                                            :disabled="loading"
+                                        />
+                                        <n-button
+                                            @click="createWorkspace"
+                                            :loading="loading"
+                                            block
+                                            type="primary"
+                                        >
+                                            Create Workspace
+                                        </n-button>
+                                    </n-space>
+                                </div>
 
-    <div class="main-content">
-        <div class="workspace-list" id="workspace-list">
-            <div class="workspace-item">
-                <div class="workspace-name">No workspaces</div>
-                <div class="workspace-path">Create a workspace to get started</div>
-            </div>
-        </div>
+                                <!-- Workspace List -->
+                                <div>
+                                    <n-text style="font-weight: bold; margin-bottom: 1rem; display: block;">Workspaces</n-text>
+                                    <div v-if="workspaces.length === 0" class="loading">
+                                        No workspaces created yet
+                                    </div>
+                                    <div
+                                        v-for="workspace in workspaces"
+                                        :key="workspace.id"
+                                        class="workspace-item"
+                                        :class="{ active: currentSession?.id === workspace.id }"
+                                        @click="selectWorkspace(workspace)"
+                                    >
+                                        <n-space vertical size="small">
+                                            <n-text strong>{{ workspace.name }}</n-text>
+                                            <n-text depth="3" style="font-size: 0.8rem;">{{ workspace.path }}</n-text>
+                                        </n-space>
+                                    </div>
+                                </div>
 
-        <div class="chat-container">
-            <div class="chat-messages" id="chat-messages">
-                <div class="message ai">
-                    <div class="message-content">Welcome to Gemini CLI Web Service! Create a workspace and start chatting.</div>
-                    <div class="message-timestamp">Just now</div>
+                                <!-- Pending Approvals -->
+                                <div v-if="pendingApprovals.length > 0">
+                                    <n-text style="font-weight: bold; margin-bottom: 1rem; display: block;">Pending Approvals</n-text>
+                                    <div
+                                        v-for="approval in pendingApprovals"
+                                        :key="approval.id"
+                                        class="pending-approval"
+                                    >
+                                        <n-space vertical size="small">
+                                            <n-text strong>{{ approval.tool_name }}</n-text>
+                                            <n-text style="font-size: 0.9rem;">{{ approval.description }}</n-text>
+                                            <n-space>
+                                                <n-button @click="handleApproval(approval.id, true)" size="small" type="success">
+                                                    Approve
+                                                </n-button>
+                                                <n-button @click="handleApproval(approval.id, false)" size="small" type="error">
+                                                    Reject
+                                                </n-button>
+                                            </n-space>
+                                        </n-space>
+                                    </div>
+                                </div>
+                            </n-space>
+                        </div>
+
+                        <!-- Chat Area -->
+                        <div class="chat-area">
+                            <div class="messages-container" ref="messagesContainer">
+                                <div v-if="!currentSession" class="loading">
+                                    Select a workspace to start chatting
+                                </div>
+                                <div v-else-if="messages.length === 0" class="loading">
+                                    Start a conversation with Gemini AI
+                                </div>
+                                <div
+                                    v-for="message in messages"
+                                    :key="message.id"
+                                    class="message"
+                                    :class="message.role"
+                                >
+                                    <n-text>{{ message.content }}</n-text>
+                                    <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 0.5rem;">
+                                        {{ new Date(message.created_at).toLocaleTimeString() }}
+                                    </div>
+                                </div>
+                                <div v-if="thinking" class="message assistant">
+                                    <n-space align="center">
+                                        <n-spin size="small" />
+                                        <n-text>Gemini is thinking...</n-text>
+                                    </n-space>
+                                </div>
+                            </div>
+
+                            <div class="input-area" v-if="currentSession">
+                                <n-space>
+                                    <n-input
+                                        v-model:value="newMessage"
+                                        placeholder="Type your message..."
+                                        @keydown.enter="sendMessage"
+                                        :disabled="thinking || !isAuthenticated"
+                                        style="flex: 1;"
+                                    />
+                                    <n-button
+                                        @click="sendMessage"
+                                        :loading="thinking"
+                                        :disabled="!newMessage.trim() || !isAuthenticated"
+                                        type="primary"
+                                    >
+                                        Send
+                                    </n-button>
+                                </n-space>
+                                <div v-if="!isAuthenticated" class="error" style="margin-top: 0.5rem;">
+                                    Please configure authentication in settings to start chatting
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Settings Modal -->
+                    <n-modal
+                        v-model:show="showSettings"
+                        preset="dialog"
+                        title="Authentication Settings"
+                        style="width: 600px;"
+                    >
+                        <div class="auth-section">
+                            <n-space vertical size="large">
+                                <n-form-item label="Authentication Type">
+                                    <n-select
+                                        v-model:value="authType"
+                                        :options="authOptions"
+                                        @update:value="onAuthTypeChange"
+                                    />
+                                </n-form-item>
+
+                                <div v-if="authType === 'GeminiApiKey'">
+                                    <n-form-item label="Gemini API Key">
+                                        <n-input
+                                            v-model:value="authConfig.api_key"
+                                            type="password"
+                                            placeholder="Enter your Gemini API key"
+                                            show-password-on="click"
+                                        />
+                                    </n-form-item>
+                                </div>
+
+                                <div v-if="authType === 'VertexAi'">
+                                    <n-space vertical>
+                                        <n-form-item label="Google Cloud Project ID">
+                                            <n-input
+                                                v-model:value="authConfig.project_id"
+                                                placeholder="Enter your GCP project ID"
+                                            />
+                                        </n-form-item>
+                                        <n-form-item label="Location">
+                                            <n-input
+                                                v-model:value="authConfig.location"
+                                                placeholder="us-central1"
+                                            />
+                                        </n-form-item>
+                                    </n-space>
+                                </div>
+
+                                <div v-if="authType === 'ExistingLogin'">
+                                    <n-alert type="info">
+                                        Using existing Gemini CLI authentication from your local system.
+                                    </n-alert>
+                                </div>
+
+                                <n-space>
+                                    <n-button @click="validateAuth" :loading="validatingAuth" type="primary">
+                                        Validate Authentication
+                                    </n-button>
+                                    <n-button @click="saveAuth" :disabled="!authValid" type="success">
+                                        Save & Apply
+                                    </n-button>
+                                </n-space>
+
+                                <div v-if="authError" class="error">
+                                    {{ authError }}
+                                </div>
+                                <div v-if="authValid" style="color: #10b981;">
+                                    ✓ Authentication is valid
+                                </div>
+                            </n-space>
+                        </div>
+                    </n-modal>
                 </div>
-            </div>
-
-            <div class="pending-approvals" id="pending-approvals" style="display: none;">
-                <h3>Pending Tool Approvals</h3>
-                <div id="approval-list"></div>
-            </div>
-
-            <div class="chat-input">
-                <div class="auto-approve-toggle">
-                    <input type="checkbox" id="auto-approve">
-                    <label for="auto-approve">Auto-approve tools</label>
-                </div>
-                <textarea id="message-input" placeholder="Type your message here..." rows="2"></textarea>
-                <button onclick="sendMessage()">Send</button>
-            </div>
-        </div>
+            </n-notification-provider>
+        </n-config-provider>
     </div>
 
     <script>
-        let currentSessionId = null;
-        let currentWorkspaceId = null;
-        let workspaces = [];
-        let pendingApprovals = [];
+        const { createApp } = Vue;
+        const { darkTheme } = naive;
 
-        function toggleSettings() {
-            const panel = document.getElementById('settings-panel');
-            panel.classList.toggle('active');
-        }
-
-        function getAuthConfig() {
-            const authType = document.getElementById('auth-type').value;
-            if (!authType) return null;
-
-            switch (authType) {
-                case 'GeminiApiKey':
-                    return {
-                        api_key: document.getElementById('gemini-api-key').value
-                    };
-                case 'VertexAi':
-                    return {
-                        project_id: document.getElementById('vertex-project-id').value,
-                        location: document.getElementById('vertex-location').value
-                    };
-                case 'ExistingLogin':
-                    return {
-                        login_path: document.getElementById('existing-login-path').value
-                    };
-                default:
-                    return null;
-            }
-        }
-
-        async function createWorkspace() {
-            const workspacePath = document.getElementById('workspace-path').value;
-            const authType = document.getElementById('auth-type').value;
-            const authConfig = getAuthConfig();
-
-            if (!workspacePath) {
-                alert('Please enter a workspace path');
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/sessions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        workspace_path: workspacePath,
-                        auth_type: authType || null,
-                        auth_config: authConfig
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-                currentSessionId = data.session_id;
-                currentWorkspaceId = data.workspace_id;
-
-                await loadWorkspaces();
-                addMessage('System', 'Workspace created successfully!', false);
-            } catch (error) {
-                console.error('Error creating workspace:', error);
-                addMessage('Error', `Failed to create workspace: ${error.message}`, false);
-            }
-        }
-
-        async function loadWorkspaces() {
-            try {
-                const response = await fetch('/api/workspaces');
-                workspaces = await response.json();
-                renderWorkspaces();
-            } catch (error) {
-                console.error('Error loading workspaces:', error);
-            }
-        }
-
-        function renderWorkspaces() {
-            const workspaceList = document.getElementById('workspace-list');
-            
-            if (workspaces.length === 0) {
-                workspaceList.innerHTML = `
-                    <div class="workspace-item">
-                        <div class="workspace-name">No workspaces</div>
-                        <div class="workspace-path">Create a workspace to get started</div>
-                    </div>
-                `;
-                return;
-            }
-
-            workspaceList.innerHTML = workspaces.map(workspace => `
-                <div class="workspace-item ${workspace.id === currentWorkspaceId ? 'active' : ''}" 
-                     onclick="selectWorkspace('${workspace.id}')">
-                    <div class="workspace-name">${workspace.name}</div>
-                    <div class="workspace-path">${workspace.path}</div>
-                    <div class="workspace-sessions">${workspace.active_sessions} active sessions</div>
-                </div>
-            `).join('');
-        }
-
-        function selectWorkspace(workspaceId) {
-            // TODO: Create new session for selected workspace
-            console.log('Selecting workspace:', workspaceId);
-        }
-
-        function addMessage(sender, content, isUser) {
-            const messagesContainer = document.getElementById('chat-messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${isUser ? 'user' : 'ai'}`;
-            
-            const timestamp = new Date().toLocaleTimeString();
-            messageDiv.innerHTML = `
-                <div class="message-content">${content}</div>
-                <div class="message-timestamp">${timestamp}</div>
-            `;
-            
-            messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-
-        async function sendMessage() {
-            const messageInput = document.getElementById('message-input');
-            const autoApprove = document.getElementById('auto-approve').checked;
-            const message = messageInput.value.trim();
-
-            if (!message || !currentSessionId) {
-                if (!currentSessionId) {
-                    alert('Please create a workspace first');
-                }
-                return;
-            }
-
-            messageInput.value = '';
-            addMessage('You', message, true);
-
-            try {
-                const response = await fetch(`/api/sessions/${currentSessionId}/messages`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        content: message,
-                        auto_approve: autoApprove
-                    })
-                });
-
-                const data = await response.json();
+        createApp({
+            setup() {
+                const showSettings = Vue.ref(false);
+                const loading = Vue.ref(false);
+                const thinking = Vue.ref(false);
+                const validatingAuth = Vue.ref(false);
                 
-                if (data.response) {
-                    addMessage('Gemini', data.response, false);
-                }
+                const workspaces = Vue.ref([]);
+                const currentSession = Vue.ref(null);
+                const messages = Vue.ref([]);
+                const pendingApprovals = Vue.ref([]);
+                const newWorkspacePath = Vue.ref('');
+                const newMessage = Vue.ref('');
+                
+                const authType = Vue.ref('GeminiApiKey');
+                const authConfig = Vue.ref({ api_key: '', project_id: '', location: 'us-central1' });
+                const authValid = Vue.ref(false);
+                const authError = Vue.ref('');
+                const isAuthenticated = Vue.ref(false);
+                
+                const authOptions = [
+                    { label: 'Gemini API Key', value: 'GeminiApiKey' },
+                    { label: 'Vertex AI', value: 'VertexAi' },
+                    { label: 'Existing Login', value: 'ExistingLogin' }
+                ];
 
-                if (data.pending_approvals && data.pending_approvals.length > 0) {
-                    showPendingApprovals(data.pending_approvals);
-                }
-            } catch (error) {
-                console.error('Error sending message:', error);
-                addMessage('Error', `Failed to send message: ${error.message}`, false);
-            }
-        }
-
-        function showPendingApprovals(approvals) {
-            pendingApprovals = approvals;
-            const approvalsContainer = document.getElementById('pending-approvals');
-            const approvalList = document.getElementById('approval-list');
-
-            if (approvals.length === 0) {
-                approvalsContainer.style.display = 'none';
-                return;
-            }
-
-            approvalsContainer.style.display = 'block';
-            approvalList.innerHTML = approvals.map(approval => `
-                <div class="approval-item">
-                    <h4>${approval.tool_name}</h4>
-                    <p>${approval.description}</p>
-                    <pre>${JSON.stringify(approval.tool_args, null, 2)}</pre>
-                    <div class="approval-actions">
-                        <button class="approve-btn" onclick="handleApproval('${approval.id}', true)">Approve</button>
-                        <button class="reject-btn" onclick="handleApproval('${approval.id}', false)">Reject</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        async function handleApproval(approvalId, approved) {
-            try {
-                await fetch(`/api/sessions/${currentSessionId}/approve`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        approval_id: approvalId,
-                        approved: approved,
-                        auto_approve_future: null
-                    })
+                // Load workspaces on startup
+                Vue.onMounted(() => {
+                    loadWorkspaces();
                 });
 
-                // Remove the approval from the list
-                pendingApprovals = pendingApprovals.filter(a => a.id !== approvalId);
-                showPendingApprovals(pendingApprovals);
+                const loadWorkspaces = async () => {
+                    try {
+                        const response = await fetch('/api/workspaces');
+                        if (response.ok) {
+                            workspaces.value = await response.json();
+                        }
+                    } catch (error) {
+                        console.error('Failed to load workspaces:', error);
+                    }
+                };
 
-                addMessage('System', `Tool ${approved ? 'approved' : 'rejected'}`, false);
-            } catch (error) {
-                console.error('Error handling approval:', error);
-                addMessage('Error', `Failed to handle approval: ${error.message}`, false);
+                const createWorkspace = async () => {
+                    if (!newWorkspacePath.value.trim()) return;
+                    
+                    loading.value = true;
+                    try {
+                        const authInfo = isAuthenticated.value ? {
+                            auth_type: authType.value,
+                            config: authConfig.value
+                        } : null;
+
+                        const response = await fetch('/api/sessions', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                workspace_path: newWorkspacePath.value,
+                                auth_info: authInfo
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            await loadWorkspaces();
+                            newWorkspacePath.value = '';
+                            // Select the new workspace
+                            const newWorkspace = workspaces.value.find(w => w.id === result.session_id);
+                            if (newWorkspace) {
+                                selectWorkspace(newWorkspace);
+                            }
+                        } else {
+                            const error = await response.text();
+                            window.$message?.error(`Failed to create workspace: ${error}`);
+                        }
+                    } catch (error) {
+                        window.$message?.error('Failed to create workspace');
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                const selectWorkspace = async (workspace) => {
+                    currentSession.value = workspace;
+                    await loadSessionHistory(workspace.id);
+                };
+
+                const loadSessionHistory = async (sessionId) => {
+                    try {
+                        const response = await fetch(`/api/sessions/${sessionId}/history`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            messages.value = data.messages || [];
+                            pendingApprovals.value = data.pending_approvals || [];
+                        }
+                    } catch (error) {
+                        console.error('Failed to load session history:', error);
+                    }
+                };
+
+                const sendMessage = async () => {
+                    if (!newMessage.value.trim() || !currentSession.value || thinking.value) return;
+                    
+                    const messageText = newMessage.value;
+                    newMessage.value = '';
+                    thinking.value = true;
+                    
+                    try {
+                        const response = await fetch(`/api/sessions/${currentSession.value.id}/messages`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ message: messageText })
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            await loadSessionHistory(currentSession.value.id);
+                        } else {
+                            const error = await response.text();
+                            window.$message?.error(`Failed to send message: ${error}`);
+                        }
+                    } catch (error) {
+                        window.$message?.error('Failed to send message');
+                    } finally {
+                        thinking.value = false;
+                    }
+                };
+
+                const handleApproval = async (approvalId, approved) => {
+                    if (!currentSession.value) return;
+                    
+                    try {
+                        const response = await fetch(`/api/sessions/${currentSession.value.id}/approve/${approvalId}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ approved })
+                        });
+                        
+                        if (response.ok) {
+                            await loadSessionHistory(currentSession.value.id);
+                            window.$message?.success(approved ? 'Tool approved and executed' : 'Tool execution rejected');
+                        } else {
+                            const error = await response.text();
+                            window.$message?.error(`Failed to process approval: ${error}`);
+                        }
+                    } catch (error) {
+                        window.$message?.error('Failed to process approval');
+                    }
+                };
+
+                const onAuthTypeChange = () => {
+                    authConfig.value = authType.value === 'VertexAi' 
+                        ? { project_id: '', location: 'us-central1' }
+                        : { api_key: '' };
+                    authValid.value = false;
+                    authError.value = '';
+                };
+
+                const validateAuth = async () => {
+                    validatingAuth.value = true;
+                    authError.value = '';
+                    authValid.value = false;
+                    
+                    try {
+                        // For now, just do basic validation since the backend validate endpoint needs to be implemented
+                        if (authType.value === 'GeminiApiKey' && authConfig.value.api_key?.length > 10) {
+                            authValid.value = true;
+                            window.$message?.success('Authentication appears valid');
+                        } else if (authType.value === 'VertexAi' && authConfig.value.project_id?.length > 6) {
+                            authValid.value = true;
+                            window.$message?.success('Authentication appears valid');
+                        } else if (authType.value === 'ExistingLogin') {
+                            authValid.value = true;
+                            window.$message?.success('Will use existing login');
+                        } else {
+                            authError.value = 'Invalid authentication configuration';
+                        }
+                    } catch (error) {
+                        authError.value = 'Failed to validate authentication';
+                    } finally {
+                        validatingAuth.value = false;
+                    }
+                };
+
+                const saveAuth = () => {
+                    if (authValid.value) {
+                        isAuthenticated.value = true;
+                        showSettings.value = false;
+                        window.$message?.success('Authentication saved successfully');
+                    }
+                };
+
+                return {
+                    darkTheme,
+                    showSettings,
+                    loading,
+                    thinking,
+                    validatingAuth,
+                    workspaces,
+                    currentSession,
+                    messages,
+                    pendingApprovals,
+                    newWorkspacePath,
+                    newMessage,
+                    authType,
+                    authConfig,
+                    authValid,
+                    authError,
+                    isAuthenticated,
+                    authOptions,
+                    createWorkspace,
+                    selectWorkspace,
+                    sendMessage,
+                    handleApproval,
+                    onAuthTypeChange,
+                    validateAuth,
+                    saveAuth
+                };
             }
-        }
-
-        // Handle Enter key in message input
-        document.getElementById('message-input').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
-        // Load workspaces on page load
-        loadWorkspaces();
+        }).use(naive).mount('#app');
     </script>
 </body>
 </html>

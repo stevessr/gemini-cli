@@ -6,12 +6,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Config, AuthType, sessionId } from '@google/gemini-cli-core';
-import { loadSettings } from '../packages/cli/src/config/settings.js';
-import { loadExtensions } from '../packages/cli/src/config/extension.js';
-import { loadCliConfig } from '../packages/cli/src/config/loadCliConfig.js';
+import { 
+  Config, 
+  AuthType, 
+  sessionId, 
+  DEFAULT_GEMINI_FLASH_MODEL,
+  createConfig
+} from '@google/gemini-cli-core';
 import process from 'process';
 import fs from 'fs';
+import path from 'path';
 
 class GeminiBridge {
   constructor() {
@@ -54,6 +58,9 @@ class GeminiBridge {
         case 'get_auth_info':
           await this.getAuthInfo(id, params);
           break;
+        case 'validate_auth':
+          await this.validateAuth(id, params);
+          break;
         default:
           this.sendError(id, `Unknown method: ${method}`);
       }
@@ -66,33 +73,39 @@ class GeminiBridge {
     try {
       const { workspace_path, auth_info } = params;
       
-      // Load settings for the workspace
-      const settings = this.loadSettingsForWorkspace(workspace_path);
-      
-      // Load extensions
-      const extensions = this.loadExtensionsForWorkspace(workspace_path);
-      
-      // Create configuration with empty argv (non-interactive mode)
-      const argv = {
-        promptInteractive: false,
-        useExternalAuth: false,
-        debug: false,
-        nonInteractive: true,
-      };
+      // Verify workspace path exists
+      if (!fs.existsSync(workspace_path)) {
+        this.sendError(requestId, `Workspace path does not exist: ${workspace_path}`);
+        return;
+      }
 
-      const config = await loadCliConfig(
-        settings.merged,
-        extensions,
-        sessionId,
-        argv
-      );
+      // Create configuration using the core package
+      const config = await createConfig({
+        cwd: workspace_path,
+        model: DEFAULT_GEMINI_FLASH_MODEL,
+        nonInteractive: true
+      });
 
       // Set up authentication if provided
       if (auth_info) {
-        await this.setupAuthentication(config, auth_info);
+        const authResult = await this.setupAuthentication(config, auth_info);
+        if (!authResult.success) {
+          this.sendError(requestId, authResult.error);
+          return;
+        }
       }
 
       const sessionKey = `${workspace_path}-${Date.now()}`;
+      
+      // Initialize Gemini client to validate authentication
+      try {
+        const client = config.getGeminiClient();
+        await client.validateAuth(); // This will throw if auth is invalid
+      } catch (error) {
+        this.sendError(requestId, `Authentication validation failed: ${error.message}`);
+        return;
+      }
+
       this.sessions.set(sessionKey, {
         config,
         workspace_path,
@@ -123,18 +136,21 @@ class GeminiBridge {
         timestamp: new Date().toISOString(),
       });
 
-      // TODO: Integrate with Gemini CLI core to actually send the message
-      // For now, simulate a response based on the existing CLI functionality
-      const response = await this.simulateGeminiResponse(message, session.config);
+      // Use actual Gemini CLI core to send the message
+      const response = await this.sendMessageToGemini(message, session.config);
 
       // Add AI response to session
       session.messages.push({
         role: 'assistant',
-        content: response,
+        content: response.text,
         timestamp: new Date().toISOString(),
+        pending_approvals: response.pending_approvals || []
       });
 
-      this.sendSuccess(requestId, { response });
+      this.sendSuccess(requestId, { 
+        response: response.text, 
+        pending_approvals: response.pending_approvals || []
+      });
     } catch (error) {
       this.sendError(requestId, `Failed to send message: ${error.message}`);
     }
@@ -142,11 +158,29 @@ class GeminiBridge {
 
   async executeTool(requestId, params) {
     try {
-      const { tool_name, args } = params;
+      const { session_id, tool_name, args, approved } = params;
+      const session = this.sessions.get(session_id);
       
-      // TODO: Integrate with actual tool execution from Core package
-      // For now, simulate tool execution
-      const result = `Executed ${tool_name} with args: ${JSON.stringify(args)}`;
+      if (!session) {
+        this.sendError(requestId, 'Session not found');
+        return;
+      }
+      
+      if (!approved) {
+        this.sendError(requestId, 'Tool execution not approved');
+        return;
+      }
+
+      // Execute the tool using the config's tool registry
+      const toolRegistry = session.config.getToolRegistry();
+      const tool = toolRegistry.getTool(tool_name);
+      
+      if (!tool) {
+        this.sendError(requestId, `Tool not found: ${tool_name}`);
+        return;
+      }
+
+      const result = await tool.execute(args, session.config);
       
       this.sendSuccess(requestId, { result });
     } catch (error) {
@@ -159,13 +193,13 @@ class GeminiBridge {
       const { workspace_path } = params;
       
       // Check for existing authentication files
-      const geminiDir = `${workspace_path}/.gemini`;
+      const geminiDir = path.join(workspace_path, '.gemini');
       const userHome = process.env.HOME || process.env.USERPROFILE;
-      const globalGeminiDir = `${userHome}/.gemini`;
+      const globalGeminiDir = path.join(userHome, '.gemini');
       
       const authInfo = {
-        has_local_auth: fs.existsSync(`${geminiDir}/auth`),
-        has_global_auth: fs.existsSync(`${globalGeminiDir}/auth`),
+        has_local_auth: fs.existsSync(path.join(geminiDir, 'auth')),
+        has_global_auth: fs.existsSync(path.join(globalGeminiDir, 'auth')),
         available_auth_types: ['GeminiApiKey', 'VertexAi', 'ExistingLogin'],
       };
       
@@ -175,60 +209,121 @@ class GeminiBridge {
     }
   }
 
-  loadSettingsForWorkspace(workspacePath) {
+  async validateAuth(requestId, params) {
     try {
-      // Use the same settings loading logic as the CLI
-      return loadSettings(workspacePath);
-    } catch (error) {
-      // Return minimal settings if loading fails
-      return {
-        merged: {},
-        errors: [],
-      };
-    }
-  }
+      const { auth_type, config: authConfig, workspace_path } = params;
+      
+      // Create a temporary config to test authentication
+      const tempConfig = await createConfig({
+        cwd: workspace_path || process.cwd(),
+        model: DEFAULT_GEMINI_FLASH_MODEL,
+        nonInteractive: true
+      });
 
-  loadExtensionsForWorkspace(workspacePath) {
-    try {
-      return loadExtensions(workspacePath);
+      const authResult = await this.setupAuthentication(tempConfig, { auth_type, config: authConfig });
+      
+      if (!authResult.success) {
+        this.sendError(requestId, authResult.error);
+        return;
+      }
+
+      // Try to validate the authentication
+      try {
+        const client = tempConfig.getGeminiClient();
+        await client.validateAuth();
+        this.sendSuccess(requestId, { valid: true });
+      } catch (error) {
+        this.sendError(requestId, `Authentication invalid: ${error.message}`);
+      }
     } catch (error) {
-      return [];
+      this.sendError(requestId, `Failed to validate auth: ${error.message}`);
     }
   }
 
   async setupAuthentication(config, authInfo) {
     const { auth_type, config: authConfig } = authInfo;
     
-    switch (auth_type) {
-      case 'GeminiApiKey':
-        process.env.GEMINI_API_KEY = authConfig.api_key;
-        await config.refreshAuth(AuthType.USE_GEMINI);
-        break;
-      case 'VertexAi':
-        process.env.GOOGLE_CLOUD_PROJECT = authConfig.project_id;
-        process.env.GOOGLE_CLOUD_LOCATION = authConfig.location || 'us-central1';
-        await config.refreshAuth(AuthType.USE_VERTEX_AI);
-        break;
-      case 'ExistingLogin':
-        // The existing login should already be available in the standard location
-        await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
-        break;
+    try {
+      switch (auth_type) {
+        case 'GeminiApiKey':
+          if (!authConfig.api_key) {
+            return { success: false, error: 'API key is required' };
+          }
+          process.env.GEMINI_API_KEY = authConfig.api_key;
+          await config.refreshAuth(AuthType.USE_GEMINI);
+          break;
+        case 'VertexAi':
+          if (!authConfig.project_id) {
+            return { success: false, error: 'Project ID is required for Vertex AI' };
+          }
+          process.env.GOOGLE_CLOUD_PROJECT = authConfig.project_id;
+          process.env.GOOGLE_CLOUD_LOCATION = authConfig.location || 'us-central1';
+          await config.refreshAuth(AuthType.USE_VERTEX_AI);
+          break;
+        case 'ExistingLogin':
+          // The existing login should already be available in the standard location
+          await config.refreshAuth(AuthType.LOGIN_WITH_GOOGLE);
+          break;
+        default:
+          return { success: false, error: `Unknown auth type: ${auth_type}` };
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: `Authentication setup failed: ${error.message}` };
     }
   }
 
-  async simulateGeminiResponse(message, config) {
-    // TODO: Replace with actual Gemini API call using the config
-    // This would use config.getGeminiClient() to get the authenticated client
-    // and then send the message through the normal Gemini CLI flow
-    
-    const responses = [
-      "I understand. Let me help you with that.",
-      "I can assist you with various tasks including file operations, code analysis, and more.",
-      "What specific task would you like me to help you with?",
-      "I'm ready to work with your codebase. What would you like to do?",
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
+  async sendMessageToGemini(message, config) {
+    try {
+      // Get the Gemini client from the config
+      const client = config.getGeminiClient();
+      
+      // Create a content generator for streaming responses
+      const contentGenerator = client.getContentGenerator();
+      
+      // Send the message and get response
+      const response = await contentGenerator.generateContent([{
+        role: 'user',
+        parts: [{ text: message }]
+      }]);
+
+      // Extract text from response
+      let responseText = '';
+      if (response.candidates && response.candidates[0]) {
+        const candidate = response.candidates[0];
+        if (candidate.content && candidate.content.parts) {
+          responseText = candidate.content.parts
+            .filter(part => part.text)
+            .map(part => part.text)
+            .join('');
+        }
+      }
+
+      // Check for tool calls that need approval
+      const pendingApprovals = [];
+      if (response.candidates && response.candidates[0]) {
+        const candidate = response.candidates[0];
+        if (candidate.content && candidate.content.parts) {
+          for (const part of candidate.content.parts) {
+            if (part.functionCall) {
+              pendingApprovals.push({
+                id: `tool-${Date.now()}-${Math.random()}`,
+                tool_name: part.functionCall.name,
+                args: part.functionCall.args,
+                description: `Execute ${part.functionCall.name} with provided arguments`
+              });
+            }
+          }
+        }
+      }
+
+      return {
+        text: responseText || 'I understand. Let me help you with that.',
+        pending_approvals: pendingApprovals
+      };
+    } catch (error) {
+      throw new Error(`Failed to send message to Gemini: ${error.message}`);
+    }
   }
 
   sendSuccess(requestId, data) {
