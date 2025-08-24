@@ -48,7 +48,36 @@ This will:
 cargo run --release
 ```
 
-The web service will start on `http://localhost:3000`
+The web service will start on `http://localhost:3000` by default.
+
+#### Command Line Options
+
+You can customize the server configuration using command line arguments:
+
+```bash
+# Basic usage with default settings
+cargo run --release
+
+# Custom port and host
+cargo run --release -- --port 8080 --host 0.0.0.0
+
+# Specify Gemini CLI installation path
+cargo run --release -- --gemini-cli-path /path/to/gemini-cli
+
+# Custom authentication file location
+cargo run --release -- --auth-file /path/to/auth.json
+
+# All options together
+cargo run --release -- --port 8080 --host 0.0.0.0 --gemini-cli-path /opt/gemini-cli --auth-file ~/.gemini/auth.json
+```
+
+Available options:
+- `-p, --port <PORT>`: Port to listen on (default: 3000)
+- `--host <HOST>`: IP address to bind to (default: 127.0.0.1)
+- `--gemini-cli-path <PATH>`: Path to Gemini CLI installation directory
+- `--auth-file <PATH>`: Path to Gemini CLI authentication file
+- `-h, --help`: Show help information
+- `-V, --version`: Show version information
 
 ## Usage
 

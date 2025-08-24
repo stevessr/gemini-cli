@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, anyhow};
 use uuid::Uuid;
+use std::path::PathBuf;
+
+use crate::Config;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NodeRequest {
@@ -18,17 +21,27 @@ pub struct NodeResponse {
 }
 
 pub struct NodeBridge {
-    // TODO: Manage Node.js process for bridging to Gemini CLI core
+    config: Config,
 }
 
 impl NodeBridge {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(config: Config) -> Self {
+        Self { config }
+    }
+
+    pub fn gemini_cli_path(&self) -> Option<&PathBuf> {
+        self.config.gemini_cli_path.as_ref()
     }
 
     pub async fn start_bridge(&self) -> Result<()> {
         // TODO: Start Node.js bridge process that can communicate with Gemini CLI core
         // This would spawn a Node.js process that imports and uses the Core package
+        // Use self.config.gemini_cli_path if provided, otherwise use default location
+        if let Some(cli_path) = &self.config.gemini_cli_path {
+            tracing::info!("Using Gemini CLI from: {}", cli_path.display());
+        } else {
+            tracing::info!("Using default Gemini CLI location");
+        }
         Ok(())
     }
 

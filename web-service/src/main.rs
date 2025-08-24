@@ -5,9 +5,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::{
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
+    path::PathBuf,
     sync::Arc,
 };
 use tower_http::{cors::CorsLayer, services::ServeDir};
@@ -24,12 +26,41 @@ use chat::{ChatManager, ChatMessage};
 use node_bridge::NodeBridge;
 use workspace::{WorkspaceManager, WorkspaceInfo};
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Port to listen on
+    #[arg(short, long, default_value_t = 3000)]
+    port: u16,
+
+    /// IP address to bind to
+    #[arg(long, default_value = "127.0.0.1")]
+    host: IpAddr,
+
+    /// Path to Gemini CLI installation directory
+    #[arg(long)]
+    gemini_cli_path: Option<PathBuf>,
+
+    /// Path to Gemini CLI authentication file
+    #[arg(long)]
+    auth_file: Option<PathBuf>,
+}
+
+#[derive(Clone)]
+pub struct Config {
+    pub host: IpAddr,
+    pub port: u16,
+    pub gemini_cli_path: Option<PathBuf>,
+    pub auth_file: Option<PathBuf>,
+}
+
 #[derive(Clone)]
 pub struct AppState {
     auth_manager: Arc<AuthManager>,
     chat_manager: Arc<ChatManager>,
     workspace_manager: Arc<WorkspaceManager>,
     node_bridge: Arc<NodeBridge>,
+    config: Config,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -188,15 +219,35 @@ async fn serve_frontend() -> Html<&'static str> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+    
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
         .init();
 
+    let config = Config {
+        host: args.host,
+        port: args.port,
+        gemini_cli_path: args.gemini_cli_path,
+        auth_file: args.auth_file,
+    };
+
+    info!("Starting Gemini Web Service with configuration:");
+    info!("  Host: {}", config.host);
+    info!("  Port: {}", config.port);
+    if let Some(ref cli_path) = config.gemini_cli_path {
+        info!("  Gemini CLI Path: {}", cli_path.display());
+    }
+    if let Some(ref auth_file) = config.auth_file {
+        info!("  Auth File: {}", auth_file.display());
+    }
+
     let app_state = AppState {
-        auth_manager: Arc::new(AuthManager::new()),
+        auth_manager: Arc::new(AuthManager::new(config.clone())),
         chat_manager: Arc::new(ChatManager::new()),
         workspace_manager: Arc::new(WorkspaceManager::new()),
-        node_bridge: Arc::new(NodeBridge::new()),
+        node_bridge: Arc::new(NodeBridge::new(config.clone())),
+        config: config.clone(),
     };
 
     let app = Router::new()
@@ -212,7 +263,7 @@ async fn main() -> anyhow::Result<()> {
         .layer(CorsLayer::permissive())
         .with_state(app_state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    let addr = SocketAddr::from((config.host, config.port));
     info!("Gemini Web Service listening on {}", addr);
     
     let listener = tokio::net::TcpListener::bind(addr).await?;

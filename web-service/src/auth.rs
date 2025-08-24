@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 use anyhow::{Result, anyhow};
+
+use crate::Config;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AuthType {
@@ -34,13 +36,19 @@ pub struct AuthInfo {
 
 pub struct AuthManager {
     auth_info: RwLock<HashMap<Uuid, AuthInfo>>,
+    config: Config,
 }
 
 impl AuthManager {
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
             auth_info: RwLock::new(HashMap::new()),
+            config,
         }
+    }
+
+    pub fn auth_file_path(&self) -> Option<&PathBuf> {
+        self.config.auth_file.as_ref()
     }
 
     pub async fn authenticate(&self, workspace_id: Uuid, request: AuthRequest) -> Result<AuthResponse> {
@@ -124,12 +132,20 @@ impl AuthManager {
     }
 
     async fn validate_existing_login(&self, config: &serde_json::Value) -> Result<bool> {
-        let login_path = config
-            .get("login_path")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow!("Missing login_path"))?;
+        let login_path = if let Some(login_path) = config.get("login_path").and_then(|v| v.as_str()) {
+            // Use provided path
+            PathBuf::from(login_path)
+        } else if let Some(auth_file) = &self.config.auth_file {
+            // Use configured auth file path
+            auth_file.clone()
+        } else {
+            // Use default location - try to detect standard Gemini CLI auth file
+            let home_dir = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
+                .map_err(|_| anyhow!("Could not determine home directory"))?;
+            PathBuf::from(home_dir).join(".gemini").join("auth.json")
+        };
 
         // Check if the login file exists
-        Ok(tokio::fs::metadata(login_path).await.is_ok())
+        Ok(tokio::fs::metadata(&login_path).await.is_ok())
     }
 }
