@@ -7,12 +7,12 @@ echo "Building Gemini CLI Web Service..."
 # Build the main Gemini CLI packages first
 cd ..
 echo "Building Gemini CLI core packages..."
-npm run build
+pnpm build
 
 # Install bridge dependencies
 cd web-service/bridge
 echo "Installing Node.js bridge dependencies..."
-npm install
+pnpm install
 
 # Build Rust service
 cd ..
