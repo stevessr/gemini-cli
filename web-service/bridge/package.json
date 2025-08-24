@@ -7,6 +7,6 @@
     "start": "node bridge.js"
   },
   "dependencies": {
-    "@google/gemini-cli-core": "file:../packages/core"
+    "@google/gemini-cli-core": "file:../../packages/core"
   }
 }
